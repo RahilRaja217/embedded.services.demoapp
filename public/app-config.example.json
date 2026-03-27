@@ -1,0 +1,12 @@
+{
+  "clientId": "your-tenant-client-id",
+  "clientSecret": "your-tenant-client-secret",
+  "subscriptionClientId": "your-subscription-client-id",
+  "subscriptionClientSecret": "your-subscription-client-secret",
+  "productCode": "SAGE_ONE",
+  "platform": "UK",
+  "businessTypeCode": "SOLE_TRADER",
+  "bankOpeningBalanceJournalCode": "",
+  "bankPaymentJournalCode": "",
+  "bankReceiptJournalCode": ""
+}

@@ -1,0 +1,6 @@
+date,type,description,reference,amount,category
+2024-01-15,receipt,Client Payment - ABC Corp,INV-001,5000.00,Sales
+2024-01-20,receipt,Consulting Fee,INV-002,2500.00,Consulting
+2024-01-28,receipt,Product Sale,INV-003,1200.00,Sales
+2024-02-03,receipt,Service Revenue,INV-004,3000.00,Services
+2024-02-10,receipt,Retainer Payment,INV-005,1500.00,Retainer
