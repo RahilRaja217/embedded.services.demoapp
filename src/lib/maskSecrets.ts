@@ -162,7 +162,10 @@ export function generateCurl(
   
   if (body && method !== 'GET') {
     const maskedBody = maskJsonString(body);
-    curl += ` \\\n  -d '${maskedBody.replace(/'/g, "\\'")}'`;
+    const shellSafeBody = maskedBody
+      .replace(/\\/g, '\\\\')
+      .replace(/'/g, "\\'");
+    curl += ` \\\n  -d '${shellSafeBody}'`;
   }
   
   return curl;
