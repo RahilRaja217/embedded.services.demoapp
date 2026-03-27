@@ -13,6 +13,9 @@ import { Credentials } from '@/types/sage';
 const CONFIG_STORAGE_KEY = 'sage-demo-config';
 const CONFIG_FILE_PATH = '/app-config.local.json';
 
+// Credentials as stored in localStorage: secrets are intentionally omitted
+type PersistedCredentials = Omit<Credentials, 'clientSecret' | 'subscriptionClientSecret'>;
+
 interface ConfigState {
   credentials: Credentials | null;
   configSource: 'file' | 'localStorage' | 'none';
@@ -50,12 +53,27 @@ async function loadFileConfig(): Promise<Credentials | null> {
 
 /**
  * Loads configuration from localStorage
+ *
+ * Note: Secrets are not persisted, so clientSecret and subscriptionClientSecret
+ * will be returned as empty strings.
  */
 function loadLocalStorageConfig(): Credentials | null {
   try {
     const saved = localStorage.getItem(CONFIG_STORAGE_KEY);
     if (saved) {
-      return JSON.parse(saved);
+      const parsed = JSON.parse(saved) as PersistedCredentials;
+      return {
+        clientId: parsed.clientId || '',
+        clientSecret: '',
+        subscriptionClientId: parsed.subscriptionClientId || '',
+        subscriptionClientSecret: '',
+        productCode: parsed.productCode || 'SAGE_ONE',
+        platform: parsed.platform || 'UK',
+        businessTypeCode: parsed.businessTypeCode || 'SOLE_TRADER',
+        bankOpeningBalanceJournalCode: parsed.bankOpeningBalanceJournalCode || '',
+        bankPaymentJournalCode: parsed.bankPaymentJournalCode || '',
+        bankReceiptJournalCode: parsed.bankReceiptJournalCode || '',
+      };
     }
   } catch {
     // Invalid JSON or no data
@@ -65,10 +83,24 @@ function loadLocalStorageConfig(): Credentials | null {
 
 /**
  * Saves configuration to localStorage
+ *
+ * Note: Secrets are intentionally not stored in localStorage to avoid
+ * clear-text persistence of sensitive information.
  */
 export function saveConfig(credentials: Credentials): void {
-  localStorage.setItem(CONFIG_STORAGE_KEY, JSON.stringify(credentials));
-  // Update cache
+  const persistable: PersistedCredentials = {
+    clientId: credentials.clientId,
+    // secrets are deliberately omitted from persisted config
+    subscriptionClientId: credentials.subscriptionClientId,
+    productCode: credentials.productCode,
+    platform: credentials.platform,
+    businessTypeCode: credentials.businessTypeCode,
+    bankOpeningBalanceJournalCode: credentials.bankOpeningBalanceJournalCode,
+    bankPaymentJournalCode: credentials.bankPaymentJournalCode,
+    bankReceiptJournalCode: credentials.bankReceiptJournalCode,
+  };
+  localStorage.setItem(CONFIG_STORAGE_KEY, JSON.stringify(persistable));
+  // Update cache with full credentials (including secrets) in memory only
   if (cachedConfig) {
     cachedConfig.credentials = credentials;
     cachedConfig.configSource = 'localStorage';
