@@ -37,10 +37,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
     const saved = localStorage.getItem('sage-demo-state');
     if (saved) {
       const state = JSON.parse(saved);
-      setCredentialsState(state.credentials);
+      // Do not restore sensitive credentials or bank account data from localStorage
       setTenants(state.tenants || []);
       setActiveTenantId(state.activeTenantId);
-      setBankAccountsState(state.bankAccounts || []);
       setFinancialYears(state.financialYears || []);
       setTransactions(state.transactions || []);
       setRequiredDimensionsState(state.requiredDimensions || []);
@@ -51,19 +50,18 @@ export function AppProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
-  // Save to localStorage on changes
+  // Save non-sensitive state to localStorage on changes
   useEffect(() => {
     const state = {
-      credentials,
+      // Exclude credentials and bankAccounts to avoid storing sensitive data
       tenants,
       activeTenantId,
-      bankAccounts,
       financialYears,
       transactions,
       requiredDimensions,
     };
     localStorage.setItem('sage-demo-state', JSON.stringify(state));
-  }, [credentials, tenants, activeTenantId, bankAccounts, financialYears, transactions, requiredDimensions]);
+  }, [tenants, activeTenantId, financialYears, transactions, requiredDimensions]);
 
   const login = (password: string) => {
     if (password === DEMO_PASSWORD) {
