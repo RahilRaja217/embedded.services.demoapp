@@ -1,0 +1,6 @@
+date,type,description,reference,amount,category
+2024-01-18,payment,Office Supplies,PO-123,150.00,Office Expenses
+2024-01-22,payment,Software Subscription,SUB-001,99.00,Software
+2024-01-25,payment,Travel Expenses,EXP-001,350.00,Travel
+2024-02-01,payment,Utility Bill,UTIL-001,200.00,Utilities
+2024-02-05,payment,Insurance Premium,INS-001,500.00,Insurance
