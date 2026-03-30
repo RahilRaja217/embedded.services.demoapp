@@ -47,11 +47,9 @@ async function pollUntilReady<T>(
 }
 
 export const reportingService = {
-  /**
-   * Run & fetch the Profit & Loss report for a tenant (two-step)
-   */
-  async getProfitAndLoss(
+  async runReport(
     tenantId: string,
+    reportName: string,
     params: { startDate: string; endDate: string },
     credentials: Credentials
   ): Promise<any> {
@@ -66,11 +64,10 @@ export const reportingService = {
       },
     };
 
-    // Step 1: POST to run the report
     const runResponse = await apiRequest<{ Id: string }>(
       {
         method: 'POST',
-        endpoint: `/reportengine/v1/tenant/${tenantId}/reports/ProfitAndLoss/run`,
+        endpoint: `/reportengine/v1/tenant/${tenantId}/reports/${reportName}/run`,
         body,
         tokenType: 'tenant',
         featureArea: 'reports',
@@ -81,12 +78,11 @@ export const reportingService = {
     );
 
     if (!runResponse.success || !runResponse.data?.Id) {
-      throw new Error(runResponse.error || 'Failed to run P&L report');
+      throw new Error(runResponse.error || `Failed to run ${reportName} report`);
     }
 
     const executionId = runResponse.data.Id;
 
-    // Step 2: Poll until the execution result is ready (200)
     return await pollUntilReady<any>(
       {
         endpoint: `/reportengine/v1/tenant/${tenantId}/reports/executions/${executionId}`,
@@ -96,6 +92,39 @@ export const reportingService = {
       },
       credentials
     );
+  },
+
+  /**
+   * Run & fetch the Profit & Loss report for a tenant (two-step)
+   */
+  async getProfitAndLoss(
+    tenantId: string,
+    params: { startDate: string; endDate: string },
+    credentials: Credentials
+  ): Promise<any> {
+    return this.runReport(tenantId, 'ProfitAndLoss', params, credentials);
+  },
+
+  /**
+   * Run & fetch the Balance Sheet report for a tenant
+   */
+  async getBalanceSheet(
+    tenantId: string,
+    params: { startDate: string; endDate: string },
+    credentials: Credentials
+  ): Promise<any> {
+    return this.runReport(tenantId, 'BalanceSheet', params, credentials);
+  },
+
+  /**
+   * Run & fetch the Nominal Activity report for a tenant
+   */
+  async getNominalActivity(
+    tenantId: string,
+    params: { startDate: string; endDate: string },
+    credentials: Credentials
+  ): Promise<any> {
+    return this.runReport(tenantId, 'NominalActivity', params, credentials);
   },
 
   /**
