@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { MainLayout } from '@/components/layout/MainLayout';
 import { DocIntelligenceProvider, useDocIntelligence } from '@/contexts/DocIntelligenceContext';
 import { useApp } from '@/contexts/AppContext';
@@ -10,6 +11,7 @@ import Step6Results from '@/components/docIntelligence/steps/Step6Results';
 import StepComplete from '@/components/docIntelligence/steps/StepComplete';
 import '@/styles/doc-intelligence.css';
 import { cn } from '@/lib/utils';
+import { AlertTriangle, Settings } from 'lucide-react';
 
 const STEPS = [
   { label: 'Configure Defaults', short: 'Defaults' },
@@ -30,7 +32,7 @@ function DocIntelligenceInner() {
     }
   }, [docCredentials?.customerUniqueId]);
 
-  // Auto-fetch token when mode changes or credentials change
+  // Auto-fetch token when mode or credentials change
   useEffect(() => {
     if (state.mode === 'live' && (!docCredentials?.clientId || !docCredentials?.clientSecret)) {
       setTokenStatus('error');
@@ -61,6 +63,7 @@ function DocIntelligenceInner() {
   };
 
   const isComplete = state.currentStep >= 4;
+  const isReady = state.mode === 'mock' || tokenStatus === 'ready';
 
   return (
     <MainLayout>
@@ -121,29 +124,34 @@ function DocIntelligenceInner() {
           </div>
         </div>
 
-        {/* Live mode warning when credentials not configured */}
+        {/* Live mode: credentials not configured */}
         {state.mode === 'live' && tokenStatus === 'error' && (
-          <div className="mb-4 p-4 bg-warning/10 border border-warning/30 rounded-lg flex items-start gap-3 text-sm">
-            <span className="text-warning font-bold flex-shrink-0 mt-0.5">⚠</span>
+          <div className="bg-warning/10 border border-warning/30 rounded-lg p-6 flex items-start gap-4">
+            <AlertTriangle className="w-6 h-6 text-warning flex-shrink-0" />
             <div>
-              <strong className="text-foreground">Doc Intelligence credentials not configured.</strong>
-              <span className="text-muted-foreground ml-1">
-                Go to <strong>Admin Settings</strong> to enter your Client ID, Client Secret, and register your company.
-              </span>
+              <h3 className="font-medium text-foreground">Doc Intelligence credentials required</h3>
+              <p className="text-muted-foreground mt-1">
+                Configure your Client ID, Client Secret, and register your company in{' '}
+                <Link to="/admin" className="text-primary hover:underline font-medium inline-flex items-center gap-1">
+                  <Settings className="w-3 h-3" />
+                  Admin Settings
+                </Link>{' '}
+                before using Live mode.
+              </p>
             </div>
           </div>
         )}
 
-        {/* Token loading indicator */}
-        {tokenStatus === 'loading' && (
-          <div className="mb-4 p-3 bg-muted rounded-lg text-sm text-muted-foreground flex items-center gap-2">
-            <span className="inline-block w-3 h-3 border-2 border-muted-foreground/30 border-t-muted-foreground rounded-full animate-spin" />
+        {/* Live mode: authenticating */}
+        {state.mode === 'live' && tokenStatus === 'loading' && (
+          <div className="form-section flex items-center gap-3 text-sm text-muted-foreground">
+            <span className="inline-block w-4 h-4 border-2 border-muted-foreground/30 border-t-muted-foreground rounded-full animate-spin flex-shrink-0" />
             Authenticating with Mercury API...
           </div>
         )}
 
         {/* Step progress indicator */}
-        {!isComplete && (
+        {isReady && !isComplete && (
           <div className="bg-card rounded-xl border border-border p-4 mb-6">
             <div className="flex items-center gap-1 overflow-x-auto">
               {STEPS.map((step, idx) => {
@@ -190,12 +198,14 @@ function DocIntelligenceInner() {
         )}
 
         {/* Step content */}
-        <div className="doc-intelligence">
-          {renderStep()}
-        </div>
+        {isReady && (
+          <div className="doc-intelligence">
+            {renderStep()}
+          </div>
+        )}
 
         {/* API info footer */}
-        {!isComplete && (
+        {isReady && !isComplete && (
           <div className="mt-6 p-4 bg-muted rounded-lg">
             <h3 className="font-medium text-foreground mb-1 text-sm">Mercury Orchestration API</h3>
             <p className="text-xs text-muted-foreground">
