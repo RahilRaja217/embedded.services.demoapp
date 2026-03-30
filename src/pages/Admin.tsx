@@ -6,10 +6,10 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Checkbox } from '@/components/ui/checkbox';
-import { 
-  Save, 
-  Key, 
-  Server, 
+import {
+  Save,
+  Key,
+  Server,
   CheckCircle2,
   ExternalLink,
   AlertTriangle,
@@ -17,20 +17,27 @@ import {
   RefreshCw,
   Clock,
   Loader2,
-  Layers
+  Layers,
+  ScanText
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { getConfig, saveConfig } from '@/lib/configManager';
 import { getTokenMetadata, getToken, clearToken } from '@/lib/tokenManager';
 import { dimensionService } from '@/services/dimensionService';
 import { SageDimension, RequiredDimension } from '@/types/sage';
+import { docGetToken, docCreateCompany } from '@/services/docIntelligenceService';
+
+const DOC_AI_STORAGE_KEY = 'sage-docai-config';
 
 export default function Admin() {
-  const { credentials, setCredentials, activeTenantId, requiredDimensions, setRequiredDimensions } = useApp();
+  const { credentials, setCredentials, activeTenantId, requiredDimensions, setRequiredDimensions, setDocCredentials } = useApp();
   const { isDeveloperMode } = useDeveloperMode();
   const { toast } = useToast();
   const [isConfigLoaded, setIsConfigLoaded] = useState(false);
   const [isTesting, setIsTesting] = useState<'subscription' | 'tenant' | null>(null);
+  const [isTestingDoc, setIsTestingDoc] = useState(false);
+  const [isRegisteringDoc, setIsRegisteringDoc] = useState(false);
+  const [docCustomerUniqueId, setDocCustomerUniqueId] = useState<string | null>(null);
   const [tokenStatus, setTokenStatus] = useState<{
     subscription: { valid: boolean; expiresAt: number | null };
     tenant: { valid: boolean; expiresAt: number | null };
@@ -57,6 +64,9 @@ export default function Admin() {
     bankOpeningBalanceJournalCode: '',
     bankPaymentJournalCode: '',
     bankReceiptJournalCode: '',
+    docClientId: '',
+    docClientSecret: '',
+    docCompanyName: '',
   });
 
   useEffect(() => {
@@ -81,6 +91,14 @@ export default function Admin() {
         });
       }
     };
+
+    // Load DocAI config from localStorage
+    const docAiSaved = localStorage.getItem(DOC_AI_STORAGE_KEY);
+    if (docAiSaved) {
+      const parsed = JSON.parse(docAiSaved);
+      setFormData(prev => ({ ...prev, docClientId: parsed.clientId || '', docCompanyName: parsed.companyName || '' }));
+      setDocCustomerUniqueId(parsed.customerUniqueId || null);
+    }
 
     loadConfig();
     updateTokenStatus();
@@ -209,6 +227,55 @@ export default function Admin() {
       title: "Dimension settings saved",
       description: `${selected.length} dimension(s) marked as required for transactions.`,
     });
+  };
+
+  const handleTestDocConnection = async () => {
+    setIsTestingDoc(true);
+    try {
+      const tokenRes = await docGetToken(formData.docClientId, formData.docClientSecret, 'live');
+      if (tokenRes?.access_token) {
+        toast({ title: 'Connection successful', description: 'Doc Intelligence credentials are valid.' });
+      } else {
+        toast({ title: 'Connection failed', description: 'Invalid credentials.', variant: 'destructive' });
+      }
+    } catch {
+      toast({ title: 'Connection failed', description: 'Could not authenticate with Doc Intelligence API.', variant: 'destructive' });
+    } finally {
+      setIsTestingDoc(false);
+    }
+  };
+
+  const handleRegisterDocCompany = async () => {
+    setIsRegisteringDoc(true);
+    try {
+      const tokenRes = await docGetToken(formData.docClientId, formData.docClientSecret, 'live');
+      const companyRes = await docCreateCompany(
+        {
+          company: {
+            name: formData.docCompanyName,
+            unique_id: crypto.randomUUID(),
+            created_at: new Date().toISOString(),
+          },
+        },
+        tokenRes.access_token,
+        'live'
+      );
+      const uid = companyRes.customer_unique_id;
+      setDocCustomerUniqueId(uid);
+      setDocCredentials({ clientId: formData.docClientId, clientSecret: formData.docClientSecret, customerUniqueId: uid, companyName: formData.docCompanyName });
+      localStorage.setItem(DOC_AI_STORAGE_KEY, JSON.stringify({ clientId: formData.docClientId, customerUniqueId: uid, companyName: formData.docCompanyName }));
+      toast({ title: 'Company registered', description: `customer_unique_id saved.` });
+    } catch {
+      toast({ title: 'Registration failed', description: 'Could not register company. Check your credentials.', variant: 'destructive' });
+    } finally {
+      setIsRegisteringDoc(false);
+    }
+  };
+
+  const handleSaveDocCredentials = () => {
+    setDocCredentials({ clientId: formData.docClientId, clientSecret: formData.docClientSecret, customerUniqueId: docCustomerUniqueId, companyName: formData.docCompanyName });
+    localStorage.setItem(DOC_AI_STORAGE_KEY, JSON.stringify({ clientId: formData.docClientId, customerUniqueId: docCustomerUniqueId, companyName: formData.docCompanyName }));
+    toast({ title: 'Doc Intelligence settings saved' });
   };
 
   const formatExpiry = (timestamp: number | null) => {
@@ -476,6 +543,106 @@ export default function Admin() {
                   The journal type ID used for bank receipt transactions
                 </p>
               </div>
+            </div>
+          </div>
+
+          {/* Doc Intelligence Credentials */}
+          <div className="form-section">
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center">
+                  <ScanText className="w-5 h-5 text-primary" />
+                </div>
+                <div>
+                  <h2 className="section-title">Doc Intelligence Credentials</h2>
+                  <p className="section-description">For AI document extraction via Mercury Orchestration API</p>
+                </div>
+              </div>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={handleTestDocConnection}
+                disabled={isTestingDoc || !formData.docClientId || !formData.docClientSecret}
+              >
+                {isTestingDoc ? (
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                ) : (
+                  <RefreshCw className="w-4 h-4 mr-2" />
+                )}
+                Test
+              </Button>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="docClientId">Client ID</Label>
+                <Input
+                  id="docClientId"
+                  value={formData.docClientId}
+                  onChange={(e) => handleChange('docClientId', e.target.value)}
+                  placeholder="Enter Doc Intelligence client ID"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="docClientSecret">Client Secret</Label>
+                <Input
+                  id="docClientSecret"
+                  type="password"
+                  value={formData.docClientSecret}
+                  onChange={(e) => handleChange('docClientSecret', e.target.value)}
+                  placeholder="Enter Doc Intelligence client secret"
+                />
+              </div>
+            </div>
+
+            <div className="mt-4 pt-4 border-t border-border">
+              <h3 className="text-sm font-medium text-foreground mb-3">Company Registration</h3>
+              <div className="flex gap-4 items-end">
+                <div className="flex-1 space-y-2">
+                  <Label htmlFor="docCompanyName">Company Name</Label>
+                  <Input
+                    id="docCompanyName"
+                    value={formData.docCompanyName}
+                    onChange={(e) => handleChange('docCompanyName', e.target.value)}
+                    placeholder="e.g., Acme Corp"
+                  />
+                </div>
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={handleRegisterDocCompany}
+                  disabled={isRegisteringDoc || !formData.docClientId || !formData.docClientSecret || !formData.docCompanyName}
+                >
+                  {isRegisteringDoc ? (
+                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  ) : (
+                    <RefreshCw className="w-4 h-4 mr-2" />
+                  )}
+                  Register
+                </Button>
+              </div>
+              {docCustomerUniqueId ? (
+                <div className="mt-3 p-3 bg-muted rounded-lg">
+                  <div className="text-xs text-muted-foreground mb-1">customer_unique_id</div>
+                  <code className="text-sm font-mono text-foreground break-all">{docCustomerUniqueId}</code>
+                </div>
+              ) : (
+                <p className="text-xs text-muted-foreground mt-2">
+                  Register your company once to receive a <code>customer_unique_id</code> used in all document processing sessions.
+                </p>
+              )}
+            </div>
+
+            <div className="mt-4">
+              <Button
+                type="button"
+                onClick={handleSaveDocCredentials}
+                disabled={!formData.docClientId}
+              >
+                <Save className="w-4 h-4 mr-2" />
+                Save Doc Intelligence Settings
+              </Button>
             </div>
           </div>
 

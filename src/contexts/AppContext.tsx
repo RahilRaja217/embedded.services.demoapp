@@ -1,6 +1,15 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import { AppState, Credentials, Tenant, BankAccount, FinancialYear, BankTransaction, OpeningBalance, RequiredDimension } from '@/types/sage';
 
+export interface DocAiCredentials {
+  clientId: string;
+  clientSecret: string; // in-memory only, not persisted
+  customerUniqueId: string | null;
+  companyName: string;
+}
+
+const DOC_AI_STORAGE_KEY = 'sage-docai-config';
+
 interface AppContextType extends AppState {
   login: (password: string) => boolean;
   logout: () => void;
@@ -15,6 +24,8 @@ interface AppContextType extends AppState {
   getActiveTenant: () => Tenant | null;
   requiredDimensions: RequiredDimension[];
   setRequiredDimensions: (dims: RequiredDimension[]) => void;
+  docCredentials: DocAiCredentials | null;
+  setDocCredentials: (creds: DocAiCredentials) => void;
 }
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
@@ -32,6 +43,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [financialYears, setFinancialYears] = useState<FinancialYear[]>([]);
   const [transactions, setTransactions] = useState<BankTransaction[]>([]);
   const [requiredDimensions, setRequiredDimensionsState] = useState<RequiredDimension[]>([]);
+  const [docCredentials, setDocCredentialsState] = useState<DocAiCredentials | null>(null);
   // Load from localStorage on mount
   useEffect(() => {
     const saved = localStorage.getItem('sage-demo-state');
@@ -43,6 +55,16 @@ export function AppProvider({ children }: { children: ReactNode }) {
       setFinancialYears(state.financialYears || []);
       setTransactions(state.transactions || []);
       setRequiredDimensionsState(state.requiredDimensions || []);
+    }
+    const docAiSaved = localStorage.getItem(DOC_AI_STORAGE_KEY);
+    if (docAiSaved) {
+      const parsed = JSON.parse(docAiSaved);
+      setDocCredentialsState({
+        clientId: parsed.clientId || '',
+        clientSecret: '', // never persisted
+        customerUniqueId: parsed.customerUniqueId || null,
+        companyName: parsed.companyName || '',
+      });
     }
     const auth = sessionStorage.getItem('sage-demo-auth');
     if (auth === 'true') {
@@ -147,6 +169,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
     setRequiredDimensionsState(dims);
   };
 
+  const setDocCredentials = (creds: DocAiCredentials) => {
+    setDocCredentialsState(creds);
+  };
+
   const getActiveTenant = () => {
     return tenants.find(t => t.id === activeTenantId) || null;
   };
@@ -174,6 +200,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
         getActiveTenant,
         requiredDimensions,
         setRequiredDimensions,
+        docCredentials,
+        setDocCredentials,
       }}
     >
       {children}

@@ -30,6 +30,20 @@ export default defineConfig(({ mode }) => ({
         rewrite: (path) => path.replace(/^\/api\/sage-subscriptions/, '/slcsadapter/v2'),
         secure: true,
       },
+      // Proxy Doc Intelligence OAuth token requests
+      '/doc-auth': {
+        target: 'https://id-shadow.sage.com',
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/doc-auth/, ''),
+        secure: true,
+      },
+      // Proxy Doc Intelligence Mercury API requests
+      '/doc-ai': {
+        target: 'https://models.mercury.pre-production.eu-west-1.sageai.sagecloudops.com/external',
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/doc-ai/, ''),
+        secure: true,
+      },
     },
   },
   plugins: [react(), mode === "development" && componentTagger()].filter(Boolean),
