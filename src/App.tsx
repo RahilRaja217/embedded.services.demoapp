@@ -14,6 +14,7 @@ import FinancialYears from "./pages/FinancialYears";
 import Transactions from "./pages/Transactions";
 import Reports from "./pages/Reports";
 import NetworkConsole from "./pages/NetworkConsole";
+import DocIntelligence from "./pages/DocIntelligence";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -93,13 +94,21 @@ function AppRoutes() {
           </ProtectedRoute>
         } 
       />
-      <Route 
-        path="/network-console" 
+      <Route
+        path="/network-console"
         element={
           <ProtectedRoute>
             <NetworkConsole />
           </ProtectedRoute>
-        } 
+        }
+      />
+      <Route
+        path="/doc-intelligence"
+        element={
+          <ProtectedRoute>
+            <DocIntelligence />
+          </ProtectedRoute>
+        }
       />
       <Route path="*" element={<NotFound />} />
     </Routes>

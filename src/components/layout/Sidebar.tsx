@@ -1,14 +1,15 @@
 import { Link, useLocation } from 'react-router-dom';
-import { 
-  LayoutDashboard, 
-  Building2, 
-  Landmark, 
-  Calendar, 
-  Upload, 
-  FileText, 
+import {
+  LayoutDashboard,
+  Building2,
+  Landmark,
+  Calendar,
+  Upload,
+  FileText,
   Settings,
   LogOut,
-  Terminal
+  Terminal,
+  ScanText
 } from 'lucide-react';
 import { useApp } from '@/contexts/AppContext';
 import { useDeveloperMode } from '@/contexts/DeveloperModeContext';
@@ -29,6 +30,7 @@ const navItems = [
   { path: '/financial-years', label: 'Financial Years', icon: Calendar },
   { path: '/transactions', label: 'Transactions', icon: Upload },
   { path: '/reports', label: 'P&L Report', icon: FileText },
+  { path: '/doc-intelligence', label: 'Doc Intelligence', icon: ScanText },
   { path: '/admin', label: 'Admin Settings', icon: Settings },
 ];
 
