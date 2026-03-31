@@ -1,4 +1,5 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
+import { Link, useSearchParams } from 'react-router-dom';
 import { MainLayout } from '@/components/layout/MainLayout';
 import { useApp } from '@/contexts/AppContext';
 import { useDeveloperMode } from '@/contexts/DeveloperModeContext';
@@ -9,7 +10,11 @@ import {
   RefreshCw,
   Download,
   Loader2,
-  Code
+  Code,
+  ChevronDown,
+  ChevronRight,
+  TrendingUp,
+  TrendingDown
 } from 'lucide-react';
 import {
   Select,
@@ -61,6 +66,14 @@ interface SageReport {
   Metadata?: any;
 }
 
+// ── KPI types ─────────────────────────────────────────────────
+interface KPI {
+  label: string;
+  formattedValue: string;
+  isNegative: boolean;
+  type: 'income' | 'expense' | 'profit';
+}
+
 // ── Helpers ────────────────────────────────────────────────────
 
 function formatCellValue(cell: ReportCell): string {
@@ -84,6 +97,9 @@ function cellClasses(cell: ReportCell): string {
   const parts: string[] = [];
   if (cell.Formatting?.Variant === 'Strong') parts.push('font-semibold');
   if (cell.Formatting?.Color === 'EnclosedError') parts.push('text-destructive');
+  if (cell.Formatting?.Type === 'Currency' || cell.Formatting?.Type === 'Percentage') {
+    parts.push('tabular-nums');
+  }
   if (cell.Formatting?.Alignment === 'Right') parts.push('text-right');
   else if (cell.Formatting?.Alignment === 'Center') parts.push('text-center');
   else parts.push('text-left');
@@ -95,12 +111,83 @@ function isSpacerRow(row: ReportRow): boolean {
     row.Columns.every(c => c.Formatting?.Type === 'Spacer' || c.Value === '');
 }
 
+function extractKPIs(report: SageReport): KPI[] {
+  const byType: Partial<Record<KPI['type'], KPI>> = {};
+  const INCOME_RE = /^(total\s+)?(income|revenue|sales|turnover)/i;
+  const EXPENSE_RE = /^(total\s+)?(expenses?|costs?|expenditure|overheads?)/i;
+  const PROFIT_RE = /profit|loss/i;
+
+  const headerColumns = report.Header?.Columns ?? [];
+  const ytdIndex = headerColumns.findIndex((col) => {
+    const value = (col.Value || '').toLowerCase();
+    const multiline = (col.MultilineValue || []).join(' ').toLowerCase();
+    return value.includes('ytd') || multiline.includes('ytd');
+  });
+
+  function getNumericValue(cell?: ReportCell): number | null {
+    if (!cell || cell.Formatting?.Type !== 'Currency') return null;
+    const raw = String(cell.Value ?? '').trim();
+    if (raw === '') return null;
+    const parsed = parseFloat(raw);
+    return isNaN(parsed) ? null : parsed;
+  }
+
+  function pickKpiCurrencyCell(row: ReportRow): ReportCell | null {
+    // Prefer YTD column when available (matches the business-summary expectation).
+    if (ytdIndex >= 0) {
+      const ytdCell = row.Columns[ytdIndex];
+      if (getNumericValue(ytdCell) !== null) return ytdCell;
+    }
+
+    // Fallback: choose the right-most numeric currency value, typically the total column.
+    for (let i = row.Columns.length - 1; i >= 1; i--) {
+      const cell = row.Columns[i];
+      if (getNumericValue(cell) !== null) return cell;
+    }
+
+    return null;
+  }
+
+  function scan(rows: ReportRow[]) {
+    for (const row of rows) {
+      const firstCell = row.Columns[0];
+      const label = firstCell?.Value?.trim();
+      if (label) {
+        const currencyCell = pickKpiCurrencyCell(row);
+        if (currencyCell) {
+          let type: KPI['type'] | null = null;
+          if (PROFIT_RE.test(label)) type = 'profit';
+          else if (INCOME_RE.test(label)) type = 'income';
+          else if (EXPENSE_RE.test(label)) type = 'expense';
+          if (type) {
+            // Last match wins: in a P&L, section totals always appear after
+            // their line items so the deepest/latest total naturally overwrites.
+            byType[type] = {
+              label,
+              formattedValue: formatCellValue(currencyCell),
+              isNegative: currencyCell.Formatting?.Color === 'EnclosedError',
+              type,
+            };
+          }
+        }
+      }
+      if (row.Children?.length) scan(row.Children);
+    }
+  }
+
+  scan(report.Rows);
+  return (['income', 'expense', 'profit'] as const)
+    .map((t) => byType[t])
+    .filter(Boolean) as KPI[];
+}
+
 // ── Component ──────────────────────────────────────────────────
 
 export default function Reports() {
   const { financialYears, activeTenantId, getActiveTenant, credentials } = useApp();
   const { isDeveloperMode } = useDeveloperMode();
   const { toast } = useToast();
+  const [searchParams, setSearchParams] = useSearchParams();
   const [selectedYearId, setSelectedYearId] = useState<string>('');
   const [isGenerating, setIsGenerating] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
@@ -111,10 +198,29 @@ export default function Reports() {
   const tenantYears = financialYears.filter(y => y.tenantId === activeTenantId);
 
   const selectedYear = tenantYears.find(y => y.id === selectedYearId);
+  const customStartDate = searchParams.get('startDate');
+  const customEndDate = searchParams.get('endDate');
+  const customSource = searchParams.get('source');
+  const hasCustomRange = !!customStartDate && !!customEndDate;
+
+  const getReportDateRange = () => {
+    if (hasCustomRange && customStartDate && customEndDate) {
+      return { startDate: customStartDate, endDate: customEndDate };
+    }
+    if (!selectedYear) return null;
+    return { startDate: selectedYear.startDate, endDate: selectedYear.endDate };
+  };
+
+  const runReport = async (dateRange: { startDate: string; endDate: string }) => {
+    const data = await reportingService.getProfitAndLoss(activeTenantId!, dateRange, credentials!);
+    setSageReport(data as SageReport);
+    setRawJson(JSON.stringify(data, null, 2));
+  };
 
   // ── Generate report ──────────────────────────────────────────
   const handleGenerate = async () => {
-    if (!selectedYearId || !activeTenantId || !selectedYear) return;
+    const dateRange = getReportDateRange();
+    if (!activeTenantId || !dateRange) return;
 
     if (!credentials?.clientId || !credentials?.clientSecret) {
       toast({
@@ -127,13 +233,7 @@ export default function Reports() {
 
     setIsGenerating(true);
     try {
-      const data = await reportingService.getProfitAndLoss(
-        activeTenantId,
-        { startDate: selectedYear.startDate, endDate: selectedYear.endDate },
-        credentials
-      );
-      setSageReport(data as SageReport);
-      setRawJson(JSON.stringify(data, null, 2));
+      await runReport(dateRange);
       toast({ title: 'Report generated', description: 'P&L report fetched from the API.' });
     } catch (error: any) {
       toast({
@@ -149,7 +249,8 @@ export default function Reports() {
 
   // ── Export PDF ───────────────────────────────────────────────
   const handleExportPdf = async () => {
-    if (!selectedYearId || !activeTenantId || !selectedYear) return;
+    const dateRange = getReportDateRange();
+    if (!activeTenantId || !dateRange) return;
 
     if (!credentials?.clientId || !credentials?.clientSecret) {
       toast({
@@ -164,14 +265,14 @@ export default function Reports() {
     try {
       const pdfUrl = await reportingService.exportProfitAndLossPdf(
         activeTenantId,
-        { startDate: selectedYear.startDate, endDate: selectedYear.endDate },
+        dateRange,
         credentials
       );
       // Auto-download the PDF
       const link = document.createElement('a');
       link.href = pdfUrl;
       link.target = '_blank';
-      link.download = `PnL_${selectedYear.startDate}_${selectedYear.endDate}.pdf`;
+      link.download = `PnL_${dateRange.startDate}_${dateRange.endDate}.pdf`;
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
@@ -185,6 +286,35 @@ export default function Reports() {
       });
     }
     setIsExporting(false);
+  };
+
+  useEffect(() => {
+    if (!hasCustomRange || !activeTenantId || !credentials?.clientId || !credentials?.clientSecret) return;
+
+    setIsGenerating(true);
+    runReport({ startDate: customStartDate!, endDate: customEndDate! })
+      .then(() => {
+        toast({
+          title: 'Custom report loaded',
+          description: 'Opened from dashboard trend drill-down.',
+        });
+      })
+      .catch((error: any) => {
+        toast({
+          title: 'Report failed',
+          description: error.message || 'Failed to generate P&L report for selected period.',
+          variant: 'destructive',
+        });
+        setSageReport(null);
+        setRawJson('');
+      })
+      .finally(() => setIsGenerating(false));
+  }, [hasCustomRange, customStartDate, customEndDate, activeTenantId, credentials?.clientId, credentials?.clientSecret]);
+
+  const clearCustomRange = () => {
+    setSearchParams({});
+    setSageReport(null);
+    setRawJson('');
   };
 
   // ── No tenant guard ──────────────────────────────────────────
@@ -223,12 +353,31 @@ export default function Reports() {
 
         {/* Controls */}
         <div className="bg-card rounded-xl border border-border p-6 mb-8">
+          {hasCustomRange && (
+            <div className="mb-4 p-3 rounded-lg border border-primary/30 bg-primary/5 text-sm flex flex-col md:flex-row md:items-center md:justify-between gap-2">
+              <p className="text-foreground">
+                Showing custom range from dashboard: <span className="font-medium">{customStartDate}</span> to <span className="font-medium">{customEndDate}</span>
+              </p>
+              <div className="flex items-center gap-3">
+                {customSource === 'dashboard' && (
+                  <Link to="/" className="text-primary hover:underline">Back to dashboard</Link>
+                )}
+                <button
+                  type="button"
+                  onClick={clearCustomRange}
+                  className="text-primary hover:underline"
+                >
+                  Use financial year mode
+                </button>
+              </div>
+            </div>
+          )}
           <div className="flex flex-col md:flex-row items-start md:items-end gap-4">
             <div className="flex-1">
               <label className="text-sm font-medium text-foreground mb-2 block">
                 Select Financial Year
               </label>
-              <Select value={selectedYearId} onValueChange={setSelectedYearId} disabled={isGenerating}>
+              <Select value={selectedYearId} onValueChange={setSelectedYearId} disabled={isGenerating || hasCustomRange}>
                 <SelectTrigger className="w-full md:w-64">
                   <SelectValue placeholder="Choose a year" />
                 </SelectTrigger>
@@ -242,7 +391,7 @@ export default function Reports() {
               </Select>
             </div>
 
-            <Button onClick={handleGenerate} disabled={!selectedYearId || isGenerating}>
+            <Button onClick={handleGenerate} disabled={(!hasCustomRange && !selectedYearId) || isGenerating}>
               {isGenerating ? (
                 <Loader2 className="w-4 h-4 mr-2 animate-spin" />
               ) : (
@@ -279,6 +428,7 @@ export default function Reports() {
             )}
 
             <TabsContent value="summary" className="space-y-6">
+              <KPISummary kpis={extractKPIs(sageReport)} />
               {/* Report table */}
               <div className="bg-card rounded-xl border border-border overflow-hidden">
                 <div className="p-4 border-b border-border bg-muted/50 flex items-center justify-between">
@@ -316,7 +466,7 @@ export default function Reports() {
                             key={i}
                             className={cn(
                               'px-3 py-2 whitespace-nowrap',
-                              i === 0 ? 'sticky left-0 bg-muted/30 z-10 min-w-[200px]' : 'min-w-[100px]',
+                              i === 0 ? 'sticky left-0 bg-muted z-10 min-w-[200px]' : 'min-w-[100px]',
                               col.Formatting?.Type === 'Spacer' ? 'w-4 min-w-[16px]' : '',
                               cellClasses(col)
                             )}
@@ -380,8 +530,61 @@ export default function Reports() {
   );
 }
 
+// ── KPI Summary component ──────────────────────────────────────
+function KPISummary({ kpis }: { kpis: KPI[] }) {
+  if (kpis.length === 0) return null;
+
+  return (
+    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+      {kpis.map((kpi, i) => {
+        const isProfitable = kpi.type === 'profit' && !kpi.isNegative;
+        const isLoss = kpi.type === 'profit' && kpi.isNegative;
+        return (
+          <div
+            key={i}
+            className={cn(
+              'rounded-xl border p-5',
+              isProfitable && 'border-emerald-500/30 bg-emerald-50/50 dark:bg-emerald-950/20',
+              isLoss && 'border-destructive/30 bg-destructive/5',
+              kpi.type !== 'profit' && 'border-border bg-card'
+            )}
+          >
+            <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-2">
+              {kpi.label}
+            </p>
+            <p
+              className={cn(
+                'text-2xl font-bold tabular-nums',
+                isProfitable && 'text-emerald-600 dark:text-emerald-400',
+                isLoss && 'text-destructive'
+              )}
+            >
+              {kpi.formattedValue}
+            </p>
+            {kpi.type === 'profit' && (
+              <div
+                className={cn(
+                  'flex items-center gap-1 mt-2 text-xs font-medium',
+                  isProfitable ? 'text-emerald-600 dark:text-emerald-400' : 'text-destructive'
+                )}
+              >
+                {isProfitable
+                  ? <TrendingUp className="w-3 h-3" />
+                  : <TrendingDown className="w-3 h-3" />}
+                {isProfitable ? 'Profitable period' : 'Loss-making period'}
+              </div>
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 // ── Row rendering component ─────────────────────────────────────
 function ReportRowGroup({ row, depth }: { row: ReportRow; depth: number }) {
+  const [isCollapsed, setIsCollapsed] = useState(false);
+
   if (isSpacerRow(row)) {
     return (
       <tr className="h-3">
@@ -391,34 +594,50 @@ function ReportRowGroup({ row, depth }: { row: ReportRow; depth: number }) {
   }
 
   const firstCell = row.Columns[0];
-  const isSection = firstCell?.Formatting?.Variant === 'Strong';
+  const hasChildren = (row.Children?.length ?? 0) > 0;
+  const isStrong = firstCell?.Formatting?.Variant === 'Strong';
+  const isSectionHeader = isStrong && hasChildren && depth === 0;
+  const isTotal = isStrong && !hasChildren;
 
   return (
     <>
       <tr
         className={cn(
-          'border-b border-border/40 hover:bg-muted/20 transition-colors',
-          isSection && depth === 0 && 'bg-muted/10',
-          isSection && 'border-b-border'
+          'border-b transition-colors',
+          isSectionHeader && 'bg-muted/30 border-b-border hover:bg-muted/50 cursor-pointer select-none',
+          isTotal && depth === 0 && 'bg-muted/10 border-t border-b-2 border-border',
+          isTotal && depth > 0 && 'border-t border-border/60',
+          !isStrong && 'border-border/40 hover:bg-muted/20'
         )}
+        onClick={isSectionHeader ? () => setIsCollapsed((c) => !c) : undefined}
       >
         {row.Columns.map((cell, ci) => (
           <td
             key={ci}
             className={cn(
-              'px-3 py-1.5 whitespace-nowrap',
-              ci === 0 && 'sticky left-0 bg-card z-10',
-              ci === 0 && isSection && depth === 0 && 'bg-muted/10',
+              'px-3 py-2 whitespace-nowrap',
+              // The sticky first column must have a fully-opaque background so
+              // content scrolling behind it does not bleed through.
+              ci === 0 && 'sticky left-0 z-10 bg-card',
               cell.Formatting?.Type === 'Spacer' ? 'w-4' : '',
               cellClasses(cell)
             )}
             style={ci === 0 && depth > 0 ? { paddingLeft: `${12 + depth * 16}px` } : undefined}
           >
-            {formatCellValue(cell)}
+            {ci === 0 && isSectionHeader ? (
+              <span className="flex items-center gap-2">
+                {isCollapsed
+                  ? <ChevronRight className="w-4 h-4 text-muted-foreground flex-shrink-0" />
+                  : <ChevronDown className="w-4 h-4 text-muted-foreground flex-shrink-0" />}
+                {formatCellValue(cell)}
+              </span>
+            ) : (
+              formatCellValue(cell)
+            )}
           </td>
         ))}
       </tr>
-      {row.Children?.map((child, ci) => (
+      {!isCollapsed && row.Children?.map((child, ci) => (
         <ReportRowGroup key={ci} row={child} depth={depth + 1} />
       ))}
     </>
