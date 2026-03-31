@@ -1,12 +1,11 @@
 import { useDocIntelligence } from '@/contexts/DocIntelligenceContext';
 
 const JOURNEY_STEPS = [
-  { icon: '🔐', title: 'Admin Setup', endpoint: 'POST /oauth/token · POST /v2/company/create', desc: 'Configured Doc Intelligence credentials and registered company in Admin Settings' },
-  { icon: '⚙️', title: '1. Set Defaults', endpoint: 'POST /v2/workflow/.../defaults', desc: 'Configured extraction settings for the workflow' },
-  { icon: '📤', title: '2. Upload Document', endpoint: 'POST /v2/workflow/.../run', desc: 'Submitted a document and received orchestration_id' },
-  { icon: '⏳', title: '3. Check Status', endpoint: 'POST /v2/workflow/.../status', desc: 'Polled until extraction completed' },
-  { icon: '📊', title: '4. Review & Confirm', endpoint: 'POST /v2/workflow/.../results + .../feedback', desc: 'Reviewed extraction data, edited corrections inline, and submitted feedback' },
-  { icon: '⬇️', title: '4b. Download Original', endpoint: 'POST /v2/workflow/.../download', desc: 'Obtained presigned URL to download the original document' },
+  { icon: '🔐', title: 'Admin Setup', endpoint: 'POST /oauth/token · POST /v2/company/create · POST /v2/workflow/.../defaults', desc: 'Configured credentials, registered company, and set workflow defaults in Admin Settings' },
+  { icon: '📤', title: '1. Upload Document', endpoint: 'POST /v2/workflow/.../run', desc: 'Submitted a document and received orchestration_id' },
+  { icon: '⏳', title: '2. Check Status', endpoint: 'POST /v2/workflow/.../status', desc: 'Polled until extraction completed' },
+  { icon: '📊', title: '3. Review & Confirm', endpoint: 'POST /v2/workflow/.../results + .../feedback', desc: 'Reviewed extraction data, edited corrections inline, and submitted feedback' },
+  { icon: '⬇️', title: '3b. Download Original', endpoint: 'POST /v2/workflow/.../download', desc: 'Obtained presigned URL to download the original document' },
 ];
 
 export default function StepComplete() {

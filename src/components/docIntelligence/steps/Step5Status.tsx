@@ -60,7 +60,7 @@ export default function Step5Status() {
         if (extractionResults.length > 0) {
           dispatch({ type: 'SET_RESULTS', payload: extractionResults[0] });
         }
-        completeAndAdvance(2);
+        completeAndAdvance(1);
       } else if (docStatus.status === 'error') {
         setPolling(false);
       } else {
@@ -74,7 +74,7 @@ export default function Step5Status() {
   return (
     <div>
       <div className="di-step-header">
-        <div className="di-step-badge">Step 3 of 4</div>
+        <div className="di-step-badge">Step 2 of 3</div>
         <h2 className="di-step-title">Processing Status</h2>
         <p className="di-step-desc">
           Polling the <code>/status</code> endpoint to check if the document extraction is complete.

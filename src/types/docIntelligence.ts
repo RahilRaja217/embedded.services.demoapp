@@ -1,6 +1,6 @@
 // ===== Sage AI Document Intelligence — API Types =====
 
-export type WorkflowType = 'accounts_payable' | 'employee_expense';
+export type WorkflowType = 'accounts_payable';
 
 export type StatusType = 'processing' | 'completed' | 'error';
 
@@ -58,10 +58,6 @@ export interface APWorkflowParameters {
   split_extract?: boolean;
   vms?: VMSSettings;
   extraction?: ExtractionSetting;
-}
-
-export interface ExpenseWorkflowParameters {
-  check_duplicates?: boolean;
 }
 
 export interface DefaultsRequest<T> {
@@ -201,15 +197,9 @@ export interface ResultMetadata {
   is_receipt: boolean;
 }
 
-export interface ExpenseCategory {
-  category_id: BasePrediction;
-  description: BasePrediction;
-}
-
 export interface ExtractionResult {
   metadata: ResultMetadata;
   extraction: Extraction;
-  expense_category?: ExpenseCategory[];
   vendor_from_directory?: Record<string, BasePrediction>;
 }
 
@@ -237,7 +227,6 @@ export interface FeedbackExtraction {
 export interface FeedbackItem {
   orchestration_id: string;
   extraction: FeedbackExtraction;
-  expense_category?: { category_id: string; description: string | null }[];
 }
 
 export interface FeedbackRequest {

@@ -4,7 +4,6 @@ import type {
   CompanyCreateResponse,
   DefaultsRequest,
   APWorkflowParameters,
-  ExpenseWorkflowParameters,
   RunRequest,
   RunResponse,
   StatusRequest,
@@ -20,11 +19,10 @@ import type {
 } from '@/types/docIntelligence';
 import { mockTokenResponse } from '@/mocks/docIntelligence/mockToken';
 import { mockCompanyResponse } from '@/mocks/docIntelligence/mockCompany';
-import { mockAPDefaults, mockExpenseDefaults } from '@/mocks/docIntelligence/mockDefaults';
+import { mockAPDefaults } from '@/mocks/docIntelligence/mockDefaults';
 import { mockRunResponse } from '@/mocks/docIntelligence/mockRunResponse';
 import { mockStatusProcessing, mockStatusCompleted } from '@/mocks/docIntelligence/mockStatusResponses';
 import { mockAPResults } from '@/mocks/docIntelligence/mockAPResults';
-import { mockExpenseResults } from '@/mocks/docIntelligence/mockExpenseResults';
 import { mockDownloadResponse } from '@/mocks/docIntelligence/mockDownloadResponse';
 
 const SANDBOX_URL = 'https://models.mercury.pre-production.eu-west-1.sageai.sagecloudops.com/external';
@@ -123,7 +121,7 @@ export async function docCreateCompany(
 // ===== Defaults =====
 export async function docSetDefaults(
   workflow: WorkflowType,
-  request: DefaultsRequest<APWorkflowParameters | ExpenseWorkflowParameters>,
+  request: DefaultsRequest<APWorkflowParameters>,
   token: string,
   mode: 'mock' | 'live'
 ): Promise<unknown> {
@@ -133,7 +131,7 @@ export async function docSetDefaults(
   if (mode === 'mock') {
     await delay(500);
     const response = {
-      new_defaults: workflow === 'accounts_payable' ? mockAPDefaults : mockExpenseDefaults,
+      new_defaults: mockAPDefaults,
     };
     recordApiCall('POST', displayUrl, request, response);
     return response;
@@ -226,7 +224,7 @@ export async function docGetResults(
 
   if (mode === 'mock') {
     await delay(700);
-    const results = workflow === 'accounts_payable' ? [mockAPResults] : [mockExpenseResults];
+    const results = [mockAPResults];
     recordApiCall('POST', displayUrl, request, { results });
     return results;
   }

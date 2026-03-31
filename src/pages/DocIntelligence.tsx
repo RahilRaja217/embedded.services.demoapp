@@ -4,7 +4,6 @@ import { MainLayout } from '@/components/layout/MainLayout';
 import { DocIntelligenceProvider, useDocIntelligence } from '@/contexts/DocIntelligenceContext';
 import { useApp } from '@/contexts/AppContext';
 import { docGetToken } from '@/services/docIntelligenceService';
-import Step3Defaults from '@/components/docIntelligence/steps/Step3Defaults';
 import Step4Upload from '@/components/docIntelligence/steps/Step4Upload';
 import Step5Status from '@/components/docIntelligence/steps/Step5Status';
 import Step6Results from '@/components/docIntelligence/steps/Step6Results';
@@ -14,7 +13,6 @@ import { cn } from '@/lib/utils';
 import { AlertTriangle, Settings } from 'lucide-react';
 
 const STEPS = [
-  { label: 'Configure Defaults', short: 'Defaults' },
   { label: 'Upload Document', short: 'Upload' },
   { label: 'Processing Status', short: 'Status' },
   { label: 'Review & Confirm', short: 'Results' },
@@ -53,16 +51,15 @@ function DocIntelligenceInner() {
 
   const renderStep = () => {
     switch (state.currentStep) {
-      case 0: return <Step3Defaults />;
-      case 1: return <Step4Upload />;
-      case 2: return <Step5Status />;
-      case 3: return <Step6Results />;
-      case 4: return <StepComplete />;
-      default: return <Step3Defaults />;
+      case 0: return <Step4Upload />;
+      case 1: return <Step5Status />;
+      case 2: return <Step6Results />;
+      case 3: return <StepComplete />;
+      default: return <Step4Upload />;
     }
   };
 
-  const isComplete = state.currentStep >= 4;
+  const isComplete = state.currentStep >= 3;
   const isReady = state.mode === 'mock' || tokenStatus === 'ready';
 
   return (
@@ -80,21 +77,6 @@ function DocIntelligenceInner() {
             </div>
             {/* Controls */}
             <div className="flex items-center gap-3 flex-shrink-0">
-              {/* Workflow selector */}
-              <div className="flex items-center gap-2">
-                <label className="text-xs font-medium text-muted-foreground whitespace-nowrap">Workflow</label>
-                <select
-                  className="text-sm border border-border rounded-md px-3 py-1.5 bg-background text-foreground"
-                  value={state.workflow}
-                  onChange={(e) => {
-                    dispatch({ type: 'SET_WORKFLOW', payload: e.target.value as 'accounts_payable' | 'employee_expense' });
-                    dispatch({ type: 'RESET' });
-                  }}
-                >
-                  <option value="accounts_payable">Accounts Payable</option>
-                  <option value="employee_expense">Employee Expense</option>
-                </select>
-              </div>
               {/* Mode toggle */}
               <div className="flex items-center gap-2 bg-muted rounded-lg p-1">
                 <button

@@ -32,7 +32,6 @@ export default function Step4Upload() {
   const [dragOver, setDragOver] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const isAP = state.workflow === 'accounts_payable';
 
   const handleFileChange = (file: File) => {
     setUploadedFile(file);
@@ -93,7 +92,7 @@ export default function Step4Upload() {
       }
 
       dispatch({ type: 'SET_ORCHESTRATION_ID', payload: res.orchestration_id });
-      completeAndAdvance(1);
+      completeAndAdvance(0);
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : 'Upload failed');
     } finally {
@@ -106,10 +105,10 @@ export default function Step4Upload() {
   return (
     <div>
       <div className="di-step-header">
-        <div className="di-step-badge">Step 2 of 4</div>
+        <div className="di-step-badge">Step 1 of 3</div>
         <h2 className="di-step-title">Upload Document</h2>
         <p className="di-step-desc">
-          Upload a {isAP ? 'invoice or financial document' : 'receipt or expense document'} for AI-powered extraction.
+          Upload an invoice or financial document for AI-powered extraction.
           The file is sent as a base64-encoded string.
         </p>
       </div>

@@ -220,15 +220,9 @@ export default function Step6Results() {
       for (const [key, pred] of Object.entries(row)) tr[key] = (pred as BasePrediction).value;
       return tr;
     });
-    const expenseCategoryFeedback = result.expense_category?.map((cat) => ({
-      category_id: cat.category_id.value,
-      description: cat.description.value,
-    }));
-
     return {
       header: headerFeedback, vendor: vendorFeedback, recipient: recipientFeedback,
       line_items: lineItemsFeedback, payment: paymentFeedback, tax_table: taxTableFeedback,
-      ...(expenseCategoryFeedback ? { expense_category: expenseCategoryFeedback } : {}),
     };
   };
 
@@ -246,10 +240,10 @@ export default function Step6Results() {
         state.mode
       );
       dispatch({ type: 'SET_FEEDBACK_SENT', payload: true });
-      completeAndAdvance(3);
+      completeAndAdvance(2);
     } catch {
       dispatch({ type: 'SET_FEEDBACK_SENT', payload: true });
-      completeAndAdvance(3);
+      completeAndAdvance(2);
     } finally {
       setSubmitting(false);
     }
@@ -275,14 +269,10 @@ export default function Step6Results() {
 
     return (
       <div className="document-viewer__placeholder">
-        <div className="document-viewer__placeholder-icon">
-          {state.workflow === 'employee_expense' ? '🧾' : '📄'}
-        </div>
-        <p><strong>Sample {state.workflow === 'employee_expense' ? 'Receipt' : 'Invoice'}</strong></p>
+        <div className="document-viewer__placeholder-icon">📄</div>
+        <p><strong>Sample Invoice</strong></p>
         <p style={{ fontSize: '12px', marginTop: '8px' }}>
-          {state.workflow === 'employee_expense'
-            ? 'The Sage Garden Restaurant — Business lunch receipt'
-            : 'Acme Office Supplies — Multi-line equipment invoice'}
+          Acme Office Supplies — Multi-line equipment invoice
         </p>
         <p style={{ fontSize: '11px', color: 'var(--di-text-secondary)', marginTop: '16px' }}>
           Upload your own document in Step 4 to see it previewed here
@@ -295,7 +285,7 @@ export default function Step6Results() {
     return (
       <div>
         <div className="di-step-header">
-          <div className="di-step-badge">Step 4 of 4</div>
+          <div className="di-step-badge">Step 3 of 3</div>
           <h2 className="di-step-title">Review & Confirm</h2>
         </div>
         <div className="card">
@@ -305,12 +295,10 @@ export default function Step6Results() {
     );
   }
 
-  const { extraction, metadata, expense_category } = result;
+  const { extraction, metadata } = result;
   const { header, vendor, recipient, line_items, payment, tax_table } = extraction;
-  const isExpense = state.workflow === 'employee_expense';
   const lineItems = Array.isArray(line_items) ? line_items : [];
   const taxTable = Array.isArray(tax_table) ? tax_table : [];
-  const expenseCategories = Array.isArray(expense_category) ? expense_category : [];
 
   return (
     <div>
@@ -318,7 +306,7 @@ export default function Step6Results() {
         <div className="di-step-badge">Step 4 of 4</div>
         <h2 className="di-step-title">Review & Confirm</h2>
         <p className="di-step-desc">
-          The AI model has extracted and structured the following data from your {isExpense ? 'receipt' : 'invoice'}.
+          The AI model has extracted and structured the following data from your invoice.
           Review each field and <strong>edit any incorrect values</strong> directly.
           When done, submit to send feedback and improve the model.
         </p>
@@ -433,17 +421,6 @@ export default function Step6Results() {
               <FieldValue prediction={recipient.address} label="Address" />
               <FieldValue prediction={recipient.country} label="Country" />
 
-              {isExpense && expenseCategories.length > 0 && (
-                <div style={{ borderTop: '1px solid var(--di-gray-200)', marginTop: '16px', paddingTop: '16px' }}>
-                  <h4 style={{ marginBottom: '8px', fontSize: '14px', fontWeight: 600 }}>🏷️ Expense Category</h4>
-                  {expenseCategories.map((cat, i) => (
-                    <div key={i}>
-                      <FieldValue prediction={cat.category_id} label="Category" />
-                      <FieldValue prediction={cat.description} label="Description" />
-                    </div>
-                  ))}
-                </div>
-              )}
             </div>
 
             <div className="card di-mb-lg">
@@ -508,7 +485,7 @@ export default function Step6Results() {
             <div className="document-viewer">
               <div className="document-viewer__header">
                 <div className="document-viewer__title">
-                  <span>{isExpense ? '🧾' : '📄'}</span>
+                  <span>📄</span>
                   Original Document
                 </div>
                 <div className="document-viewer__actions">

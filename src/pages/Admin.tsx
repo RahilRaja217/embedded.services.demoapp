@@ -25,7 +25,7 @@ import { getConfig, saveConfig } from '@/lib/configManager';
 import { getTokenMetadata, getToken, clearToken } from '@/lib/tokenManager';
 import { dimensionService } from '@/services/dimensionService';
 import { SageDimension, RequiredDimension } from '@/types/sage';
-import { docGetToken, docCreateCompany } from '@/services/docIntelligenceService';
+import { docGetToken, docCreateCompany, docSetDefaults } from '@/services/docIntelligenceService';
 
 const DOC_AI_STORAGE_KEY = 'sage-docai-config';
 
@@ -37,7 +37,15 @@ export default function Admin() {
   const [isTesting, setIsTesting] = useState<'subscription' | 'tenant' | null>(null);
   const [isTestingDoc, setIsTestingDoc] = useState(false);
   const [isRegisteringDoc, setIsRegisteringDoc] = useState(false);
+  const [isSettingDefaults, setIsSettingDefaults] = useState(false);
+  const [defaultsSet, setDefaultsSet] = useState(false);
   const [docCustomerUniqueId, setDocCustomerUniqueId] = useState<string | null>(null);
+  const [docDefaults, setDocDefaults] = useState({
+    checkDuplicates: true,
+    vmsActive: false,
+    splitExtract: false,
+    einvoiceOnly: false,
+  });
   const [tokenStatus, setTokenStatus] = useState<{
     subscription: { valid: boolean; expiresAt: number | null };
     tenant: { valid: boolean; expiresAt: number | null };
@@ -75,9 +83,10 @@ export default function Admin() {
       setIsConfigLoaded(config.fileConfigLoaded);
       
       if (credentials) {
-        setFormData(credentials);
+        setFormData(prev => ({ ...prev, ...credentials }));
       } else if (config.credentials) {
-        setFormData({
+        setFormData(prev => ({
+          ...prev,
           clientId: config.credentials.clientId || '',
           clientSecret: config.credentials.clientSecret || '',
           subscriptionClientId: config.credentials.subscriptionClientId || '',
@@ -88,7 +97,7 @@ export default function Admin() {
           bankOpeningBalanceJournalCode: config.credentials.bankOpeningBalanceJournalCode || '',
           bankPaymentJournalCode: config.credentials.bankPaymentJournalCode || '',
           bankReceiptJournalCode: config.credentials.bankReceiptJournalCode || '',
-        });
+        }));
       }
     };
 
@@ -98,6 +107,8 @@ export default function Admin() {
       const parsed = JSON.parse(docAiSaved);
       setFormData(prev => ({ ...prev, docClientId: parsed.clientId || '', docCompanyName: parsed.companyName || '' }));
       setDocCustomerUniqueId(parsed.customerUniqueId || null);
+      if (parsed.defaults) setDocDefaults(parsed.defaults);
+      if (parsed.defaultsSet) setDefaultsSet(true);
     }
 
     loadConfig();
@@ -249,11 +260,14 @@ export default function Admin() {
     setIsRegisteringDoc(true);
     try {
       const tokenRes = await docGetToken(formData.docClientId, formData.docClientSecret, 'live');
+      // Reuse existing unique_id if already registered to avoid creating duplicate companies
+      const saved = localStorage.getItem(DOC_AI_STORAGE_KEY);
+      const existingUid = saved ? JSON.parse(saved).customerUniqueId : null;
       const companyRes = await docCreateCompany(
         {
           company: {
             name: formData.docCompanyName,
-            unique_id: crypto.randomUUID(),
+            unique_id: existingUid ?? crypto.randomUUID(),
             created_at: new Date().toISOString(),
           },
         },
@@ -262,13 +276,45 @@ export default function Admin() {
       );
       const uid = companyRes.customer_unique_id;
       setDocCustomerUniqueId(uid);
+      setDefaultsSet(false);
       setDocCredentials({ clientId: formData.docClientId, clientSecret: formData.docClientSecret, customerUniqueId: uid, companyName: formData.docCompanyName });
-      localStorage.setItem(DOC_AI_STORAGE_KEY, JSON.stringify({ clientId: formData.docClientId, customerUniqueId: uid, companyName: formData.docCompanyName }));
+      localStorage.setItem(DOC_AI_STORAGE_KEY, JSON.stringify({ clientId: formData.docClientId, customerUniqueId: uid, companyName: formData.docCompanyName, defaults: docDefaults, defaultsSet: false }));
       toast({ title: 'Company registered', description: `customer_unique_id saved.` });
     } catch {
       toast({ title: 'Registration failed', description: 'Could not register company. Check your credentials.', variant: 'destructive' });
     } finally {
       setIsRegisteringDoc(false);
+    }
+  };
+
+  const handleSetDefaults = async () => {
+    if (!docCustomerUniqueId) return;
+    setIsSettingDefaults(true);
+    try {
+      const tokenRes = await docGetToken(formData.docClientId, formData.docClientSecret, 'live');
+      await docSetDefaults(
+        'accounts_payable',
+        {
+          customer_unique_id: docCustomerUniqueId,
+          new_defaults: {
+            check_duplicates: docDefaults.checkDuplicates,
+            vms: { active: docDefaults.vmsActive },
+            split_extract: docDefaults.splitExtract,
+            extraction: { einvoice_only: docDefaults.einvoiceOnly },
+          },
+        },
+        tokenRes.access_token,
+        'live'
+      );
+      setDefaultsSet(true);
+      const saved = localStorage.getItem(DOC_AI_STORAGE_KEY);
+      const current = saved ? JSON.parse(saved) : {};
+      localStorage.setItem(DOC_AI_STORAGE_KEY, JSON.stringify({ ...current, defaults: docDefaults, defaultsSet: true }));
+      toast({ title: 'Defaults saved', description: 'Workflow defaults applied for this company.' });
+    } catch {
+      toast({ title: 'Failed to set defaults', description: 'Could not apply defaults. Check your credentials.', variant: 'destructive' });
+    } finally {
+      setIsSettingDefaults(false);
     }
   };
 
@@ -631,6 +677,58 @@ export default function Admin() {
                 <p className="text-xs text-muted-foreground mt-2">
                   Register your company once to receive a <code>customer_unique_id</code> used in all document processing sessions.
                 </p>
+              )}
+            </div>
+
+            {/* Workflow Defaults */}
+            <div className="mt-4 pt-4 border-t border-border">
+              <div className="flex items-center justify-between mb-1">
+                <h3 className="text-sm font-medium text-foreground">Accounts Payable Defaults</h3>
+                {defaultsSet && (
+                  <span className="text-xs text-success flex items-center gap-1">
+                    <CheckCircle2 className="w-3 h-3" /> Applied
+                  </span>
+                )}
+              </div>
+              <p className="text-xs text-muted-foreground mb-3">
+                Configure once per company via <code className="bg-muted px-1 rounded">POST /v2/workflow/accounts_payable/defaults</code>
+              </p>
+              <div className="space-y-3">
+                <div className="flex items-center gap-3">
+                  <Checkbox id="checkDuplicates" checked={docDefaults.checkDuplicates} onCheckedChange={(c) => setDocDefaults(p => ({ ...p, checkDuplicates: c === true }))} />
+                  <label htmlFor="checkDuplicates" className="text-sm cursor-pointer">
+                    <span className="font-medium">Check Duplicates</span>
+                    <span className="text-muted-foreground ml-2">— Block re-upload of identical documents</span>
+                  </label>
+                </div>
+                <div className="flex items-center gap-3">
+                  <Checkbox id="vmsActive" checked={docDefaults.vmsActive} onCheckedChange={(c) => setDocDefaults(p => ({ ...p, vmsActive: c === true }))} />
+                  <label htmlFor="vmsActive" className="text-sm cursor-pointer">
+                    <span className="font-medium">Vendor Matching (VMS)</span>
+                    <span className="text-muted-foreground ml-2">— Auto-match vendors from directory</span>
+                  </label>
+                </div>
+                <div className="flex items-center gap-3">
+                  <Checkbox id="splitExtract" checked={docDefaults.splitExtract} onCheckedChange={(c) => setDocDefaults(p => ({ ...p, splitExtract: c === true }))} />
+                  <label htmlFor="splitExtract" className="text-sm cursor-pointer">
+                    <span className="font-medium">Split & Extract</span>
+                    <span className="text-muted-foreground ml-2">— Extract individual docs from multi-page uploads</span>
+                  </label>
+                </div>
+                <div className="flex items-center gap-3">
+                  <Checkbox id="einvoiceOnly" checked={docDefaults.einvoiceOnly} onCheckedChange={(c) => setDocDefaults(p => ({ ...p, einvoiceOnly: c === true }))} />
+                  <label htmlFor="einvoiceOnly" className="text-sm cursor-pointer">
+                    <span className="font-medium">e-Invoice Only</span>
+                    <span className="text-muted-foreground ml-2">— Accept XML/ZUGFeRD only, no OCR</span>
+                  </label>
+                </div>
+              </div>
+              <Button type="button" variant="outline" size="sm" className="mt-4" onClick={handleSetDefaults} disabled={isSettingDefaults || !docCustomerUniqueId}>
+                {isSettingDefaults ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Save className="w-4 h-4 mr-2" />}
+                {isSettingDefaults ? 'Applying...' : 'Apply Defaults'}
+              </Button>
+              {!docCustomerUniqueId && (
+                <p className="text-xs text-muted-foreground mt-2">Register a company first to apply defaults.</p>
               )}
             </div>
 
